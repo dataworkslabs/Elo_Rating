@@ -1,0 +1,107 @@
+---
+title: "Assignment 5b: Chess Elo Expected Score Analysis"
+author: "Mark Hamer"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+## Overview
+
+This assignment extends the chess tournament data from Project 1. Using the Elo 
+rating system formula, I will calculate each player's *expected* score based on 
+the rating difference between them and each of their opponents, then compare 
+that to their *actual* score to identify who most overperformed and 
+underperformed in the tournament.
+
+---
+
+## The Elo Formula
+
+The expected score for Player A against a single opponent Player B is:
+
+$$E = \frac{1}{1 + 10^{(R_B - R_A) / 400}}$$
+
+R_A is Player A's pre-tournament rating and R_B is the opponent's 
+pre-tournament rating. This formula returns a value between 0 and 1 which represents
+the expected points from that single game. A player with an equal rating to their 
+opponent gets an expected score of exactly 0.5. A 400-point rating advantage 
+translates to like a 90% chance of winning.
+
+To get a player's total expected score for the tournament, I add their expected 
+scores across all games they actually played (excluding byes and unplayed rounds).
+
+*Formula source: The United States Chess Federation (USCF) and FIDE both use 
+this standard Elo expected score formula. Reference: 
+https://www.chess.com/terms/elo-rating-chess*
+
+---
+
+## Planned Approach
+
+### Step 1 - Reuse Project 1 Data
+
+I will keep it simple and load the chess_results.csv output 
+from Project 1 as my starting point. But, I also 
+need the opponent pair numbers per player, which are not in the CSV, so I will 
+re-run the key parsing steps from Project 1 to reconstruct the opponents list 
+and the pre-rating lookup table.
+
+### Step 2 - Calculate Expected Score Per Game
+
+For each player, I will loop through their list of opponents, look up each 
+opponent's pre-rating, and apply the Elo formula to get an expected score for 
+that individual game. I will only include rounds where an actual opponent was 
+played. Byes (H), unplayed rounds (U), and forfeits (B, X) won't be in 
+the expected score calculation.
+
+### Step 3 - Sum to Total Expected Score
+
+I will add up each player's per-game expected scores to get their total expected 
+score for the tournament, a number that should be roughly close to their 
+actual total points.
+
+### Step 4 - Calculate the Difference
+
+For each player I will figure out:
+
+difference = actual score - expected score
+
+A positive number means the player overperformed. A negative number means they 
+underperformed.
+
+### Step 5 - Identify Top 5 Over and Underperformers
+
+I will sort the data frame by the difference column and pull the top 5 and 
+bottom 5 players, displaying them in a clean  table.
+
+---
+
+## Anticipated Challenges
+
+**Handling incomplete rounds cleanly.** Some players have byes or unplayed 
+rounds that awarded points but have no opponent to calculate an expected score 
+against. Same as last assignment. My plan is to not include those
+from both sides of the comparison so actual vs expected scores remain apples-to-apples.
+
+**Provisional ratings marked with P.** Just like Project 1, some ratings 
+look like 1641P17. The Elo formula treats these the same as regular ratings 
+numerically, so the parsing fix from Project 1 carries over here without 
+additional changes.
+
+**Small differences between Elo implementations.** The assignment acknowledges 
+that different sources use slightly different constants or rounding. I will use 
+the standard USCF/FIDE formula with a divisor of 400 and cite my source clearly.
+
+---
+
+## Expected Output
+
+A data frame with one row per player containing:
+
+- Player Name
+- Actual Score
+- Expected Score (rounded to 2 decimal places)
+- Difference (Actual minus Expected)
+
+Plus two summary tables showing the 5 biggest overperformers and 
+5 biggest underperformers by that difference.
