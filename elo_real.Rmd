@@ -1,0 +1,128 @@
+---
+title: "Chess Tournament Elo Expected Score Analysis"
+author: "Mark Hamer"
+date: "2026-03-02"
+output: html_document
+---
+
+## Overview
+
+This project looks at whether the chess players in our tournament actually 
+performed the way their ratings suggested they should. Using the Elo formula, 
+I calculated what score each player was *expected* to get based on who they 
+played, then compared that to what they actually scored. The players with the 
+biggest positive gap overperformed — they beat the odds. The ones with the 
+biggest negative gap underperformed — their rating said they should have done 
+better.
+
+---
+
+## The Elo Formula
+
+The expected score for Player A against a single opponent Player B is:
+
+$$E = \frac{1}{1 + 10^{(R_B - R_A) / 400}}$$
+
+So if two players have the same rating, each expects 0.5 — a coin flip. A 
+400 point gap means the stronger player wins about 90% of the time. I add up 
+the expected scores across all 7 rounds to get each player's total expected 
+score for the tournament. Byes and unplayed rounds get skipped since there's 
+no opponent to calculate against.
+
+*Formula source: https://www.chess.com/terms/elo-rating-chess*
+
+---
+
+## Step 1: Load Libraries and Parse Tournament Data
+
+```{r setup, message=FALSE, warning=FALSE}
+library(stringr)
+library(dplyr)
+
+# Re-read and parse the tournament file (same as Project 1)
+raw_lines <- readLines("tournamentinfo.txt", warn = FALSE)
+player_lines <- raw_lines[!grepl("^-", raw_lines)]
+player_lines <- player_lines[3:length(player_lines)]
+
+row1 <- player_lines[seq(1, length(player_lines), by = 2)]
+row2 <- player_lines[seq(2, length(player_lines), by = 2)]
+
+# Extract fields
+player_name <- str_trim(str_extract(row1, "(?<=\\|)[^|]+(?=\\|)"))
+total_pts   <- as.numeric(str_trim(str_extract(row1, "(?<=\\|)\\s*\\d+\\.\\d+\\s*(?=\\|)")))
+pre_rating  <- as.numeric(str_extract(str_extract(row2, "R:\\s*\\d+"), "\\d+"))
+pair_nums   <- as.numeric(str_trim(str_extract(row1, "^\\s*\\d+")))
+
+# Build lookup and opponents list
+rating_lookup <- setNames(pre_rating, pair_nums)
+
+get_opponents <- function(line) {
+  as.numeric(na.omit(str_trim(str_extract_all(line, "(?<=[WLDX])\\s*(\\d+)")[[1]])))
+}
+opponents <- lapply(row1, get_opponents)
+```
+
+---
+
+## Step 2: Calculate Elo Expected Score
+
+```{r elo, message=FALSE, warning=FALSE}
+# Elo expected score formula
+elo_expected <- function(rating_a, rating_b) {
+  1 / (1 + 10^((rating_b - rating_a) / 400))
+}
+
+# Calculate expected score for each player across all their games
+expected_score <- sapply(seq_along(opponents), function(i) {
+  opp_ids <- opponents[[i]]
+  opp_ratings <- rating_lookup[as.character(opp_ids)]
+  sum(sapply(opp_ratings, function(r) elo_expected(pre_rating[i], r)))
+})
+
+expected_score <- round(expected_score, 2)
+
+head(data.frame(player_name, total_pts, expected_score))
+```
+
+---
+
+## Step 3: Compare Actual vs Expected and Find Top 5
+
+```{r results, message=FALSE, warning=FALSE}
+# Build the comparison data frame
+elo_df <- data.frame(
+  Player_Name    = player_name,
+  Actual_Score   = total_pts,
+  Expected_Score = expected_score,
+  Difference     = round(total_pts - expected_score, 2)
+)
+
+# Top 5 overperformers
+overperformers <- elo_df %>% arrange(desc(Difference)) %>% head(5)
+
+# Top 5 underperformers
+underperformers <- elo_df %>% arrange(Difference) %>% head(5)
+
+cat("TOP 5 OVERPERFORMERS\n")
+print(overperformers)
+
+cat("\nTOP 5 UNDERPERFORMERS\n")
+print(underperformers)
+```
+
+---
+
+## Discussion
+
+Aditya Bajaj was the biggest surprise — rated 1384 going in but scoring a 
+perfect 6 points against much stronger players. The formula only expected him 
+to score about 2 points, so he overperformed by 4. Jacob Alexander Lavalley 
+is even wilder — the math basically gave him a 0% chance but he still managed 
+3 points.
+
+On the flip side, Loren Schwiebert had the highest rating of any underperformer 
+at 1745 but only scored 3.5 — almost 3 points below what his rating predicted. 
+That's a rough tournament.
+
+The takeaway is that Elo tells you probabilities, not results. Seven rounds 
+isn't enough to iron out the variance, which is exactly why upsets happen.
